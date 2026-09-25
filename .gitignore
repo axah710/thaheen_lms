@@ -53,3 +53,4 @@ app.*.map.json
 thaheen_lms/
 .serena
 .specify
+specs/
