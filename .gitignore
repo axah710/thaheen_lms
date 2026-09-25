@@ -52,3 +52,4 @@ app.*.map.json
 .agents
 thaheen_lms/
 .serena
+.specify
