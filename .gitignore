@@ -51,3 +51,4 @@ app.*.map.json
 .agy
 .agents
 thaheen_lms/
+.serena
