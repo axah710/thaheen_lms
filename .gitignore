@@ -46,3 +46,8 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+.gemini
+.codex
+.agy
+.agents
+thaheen_lms/
