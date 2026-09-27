@@ -4,13 +4,16 @@ import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../app/theme.dart';
+import '../../../core/di/app_dependencies.dart';
 import '../../../core/storage/local_storage_service.dart';
 import '../../course/data/data_sources/course_local_data_source.dart';
 import '../../course/data/repositories/course_repository_impl.dart';
+import '../../course/domain/repositories/i_course_repository.dart';
 import '../application/lesson_player_cubit.dart';
 import '../application/lesson_player_state.dart';
 import '../data/data_sources/progress_local_data_source.dart';
 import '../data/repositories/progress_repository_impl.dart';
+import '../domain/repositories/i_progress_repository.dart';
 import 'widgets/course_completion_celebration.dart';
 import 'widgets/custom_video_controls.dart';
 import 'widgets/in_player_error_card.dart';
@@ -20,12 +23,16 @@ class LessonPlayerPage extends StatelessWidget {
   final String courseId;
   final String lessonId;
   final LessonPlayerCubit? cubit;
+  final ICourseRepository? courseRepository;
+  final IProgressRepository? progressRepository;
 
   const LessonPlayerPage({
     super.key,
     required this.courseId,
     required this.lessonId,
     this.cubit,
+    this.courseRepository,
+    this.progressRepository,
   });
 
   @override
@@ -33,6 +40,23 @@ class LessonPlayerPage extends StatelessWidget {
     if (cubit != null) {
       return BlocProvider<LessonPlayerCubit>.value(
         value: cubit!,
+        child: const _LessonPlayerLifecycleWrapper(),
+      );
+    }
+
+    final effectiveCourseRepo =
+        courseRepository ?? AppDependencies.instance?.courseRepository;
+    final effectiveProgressRepo =
+        progressRepository ?? AppDependencies.instance?.progressRepository;
+
+    if (effectiveCourseRepo != null && effectiveProgressRepo != null) {
+      return BlocProvider(
+        create: (_) => LessonPlayerCubit(
+          courseId: courseId,
+          lessonId: lessonId,
+          courseRepository: effectiveCourseRepo,
+          progressRepository: effectiveProgressRepo,
+        )..initializeLesson(),
         child: const _LessonPlayerLifecycleWrapper(),
       );
     }
@@ -50,10 +74,11 @@ class LessonPlayerPage extends StatelessWidget {
         }
 
         final storage = snapshot.data!;
-        final courseRepo = CourseRepositoryImpl(CourseLocalDataSource());
-        final progressRepo = ProgressRepositoryImpl(
-          ProgressLocalDataSource(storage),
-        );
+        final courseRepo =
+            courseRepository ?? CourseRepositoryImpl(CourseLocalDataSource());
+        final progressRepo =
+            progressRepository ??
+            ProgressRepositoryImpl(ProgressLocalDataSource(storage));
 
         return BlocProvider(
           create: (_) => LessonPlayerCubit(
@@ -122,25 +147,40 @@ class _LessonPlayerView extends StatelessWidget {
     final cubit = context.watch<LessonPlayerCubit>();
     final state = cubit.state;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: switch (state) {
-        LessonPlayerInitial() || LessonPlayerLoading() => const Scaffold(
-          backgroundColor: Color(0xFF0F172A),
-          body: Center(
-            child: CircularProgressIndicator(color: AppTheme.accentCyan),
-          ),
-        ),
-        LessonPlayerError(:final userMessageArabic) => Scaffold(
-          backgroundColor: const Color(0xFF0F172A),
-          body: InPlayerErrorCard(
-            messageArabic: userMessageArabic,
-            onRetry: () => cubit.initializeLesson(),
-            onReturn: () => context.pop(),
-          ),
-        ),
-        LessonPlayerReady() => _buildPlayerLayout(context, cubit, state),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await cubit.progressRepository.flush();
+        if (context.mounted) {
+          Navigator.of(context).pop(result);
+        }
       },
+      child: Directionality(
+        textDirection: TextDirection.rtl,
+        child: switch (state) {
+          LessonPlayerInitial() || LessonPlayerLoading() => const Scaffold(
+            backgroundColor: Color(0xFF0F172A),
+            body: Center(
+              child: CircularProgressIndicator(color: AppTheme.accentCyan),
+            ),
+          ),
+          LessonPlayerError(:final userMessageArabic) => Scaffold(
+            backgroundColor: const Color(0xFF0F172A),
+            body: InPlayerErrorCard(
+              messageArabic: userMessageArabic,
+              onRetry: () => cubit.initializeLesson(),
+              onReturn: () async {
+                await cubit.progressRepository.flush();
+                if (context.mounted) {
+                  context.pop();
+                }
+              },
+            ),
+          ),
+          LessonPlayerReady() => _buildPlayerLayout(context, cubit, state),
+        },
+      ),
     );
   }
 
@@ -192,7 +232,12 @@ class _LessonPlayerView extends StatelessWidget {
             onSeek: (position) => cubit.seekTo(position),
             onSpeedTap: () => cubit.cyclePlaybackSpeed(),
             onFullscreenToggle: () => cubit.toggleFullscreen(),
-            onBack: () => context.pop(),
+            onBack: () async {
+              await cubit.progressRepository.flush();
+              if (context.mounted) {
+                context.pop();
+              }
+            },
             onUserInteraction: () {},
           ),
         ),
@@ -335,12 +380,15 @@ class _LessonPlayerView extends StatelessWidget {
                   child: state.isTerminalLesson
                       ? ElevatedButton(
                           onPressed: state.isCompleted
-                              ? () {
-                                  CourseCompletionCelebration.show(
-                                    context,
-                                    courseTitle: state.course.title,
-                                    onFinished: () => context.pop(),
-                                  );
+                              ? () async {
+                                  await cubit.progressRepository.flush();
+                                  if (context.mounted) {
+                                    CourseCompletionCelebration.show(
+                                      context,
+                                      courseTitle: state.course.title,
+                                      onFinished: () => context.pop(),
+                                    );
+                                  }
                                 }
                               : null,
                           style: ElevatedButton.styleFrom(

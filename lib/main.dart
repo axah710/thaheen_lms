@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'app/app.dart';
 import 'app/error_boundary.dart';
+import 'core/di/app_dependencies.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +18,9 @@ void main() async {
       statusBarIconBrightness: Brightness.dark,
     ),
   );
+
+  // Initialize application-wide dependencies
+  await AppDependencies.bootstrap();
 
   runApp(const ThaheenApp());
 }

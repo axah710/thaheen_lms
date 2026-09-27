@@ -115,6 +115,9 @@ class CourseListCubit extends Cubit<CourseListState> {
   /// Clears active search filter.
   void clearSearch() => search('');
 
-  /// Refresh shortcut
-  Future<void> refresh() async => loadCourses();
+  /// Refreshes catalog and progress states after synchronizing with durable storage.
+  Future<void> refresh() async {
+    await progressRepository.syncWithStorage();
+    await loadCourses();
+  }
 }

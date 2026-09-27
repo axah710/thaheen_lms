@@ -1,4 +1,5 @@
 import 'package:bloc_test/bloc_test.dart';
+import 'package:either_dart/either.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +10,7 @@ import 'package:thaheen_lms/features/course/domain/entities/lesson.dart';
 import 'package:thaheen_lms/features/course/domain/entities/section.dart';
 import 'package:thaheen_lms/features/player/application/lesson_player_cubit.dart';
 import 'package:thaheen_lms/features/player/application/lesson_player_state.dart';
+import 'package:thaheen_lms/features/player/domain/repositories/i_progress_repository.dart';
 import 'package:thaheen_lms/features/player/presentation/lesson_player_page.dart';
 import 'package:thaheen_lms/features/player/presentation/widgets/course_completion_celebration.dart';
 import 'package:thaheen_lms/features/player/presentation/widgets/custom_video_controls.dart';
@@ -19,6 +21,8 @@ import '../helpers/fake_video_player_platform.dart';
 
 class MockLessonPlayerCubit extends MockCubit<LessonPlayerState>
     implements LessonPlayerCubit {}
+
+class MockProgressRepository extends Mock implements IProgressRepository {}
 
 Widget buildTestableWidget({required Widget child}) {
   return MaterialApp(
@@ -38,6 +42,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late MockLessonPlayerCubit mockCubit;
+  late MockProgressRepository mockProgressRepository;
 
   final lesson1 = Lesson(
     id: 'l1',
@@ -77,8 +82,15 @@ void main() {
 
   setUp(() {
     mockCubit = MockLessonPlayerCubit();
+    mockProgressRepository = MockProgressRepository();
     FakeVideoPlayerPlatform.register();
     when(() => mockCubit.controller).thenReturn(null);
+    when(
+      () => mockProgressRepository.flush(),
+    ).thenAnswer((_) async => const Right(null));
+    when(
+      () => mockCubit.progressRepository,
+    ).thenReturn(mockProgressRepository);
   });
 
   group('LessonPlayerPage Widget Tests (AAA Pattern)', () {

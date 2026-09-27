@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme.dart';
+import '../../../core/di/app_dependencies.dart';
 import '../../../core/storage/local_storage_service.dart';
 import '../../player/data/data_sources/progress_local_data_source.dart';
 import '../../player/data/repositories/progress_repository_impl.dart';
@@ -39,11 +40,16 @@ class CourseListPage extends StatelessWidget {
       );
     }
 
-    if (courseRepository != null && progressRepository != null) {
+    final effectiveCourseRepo =
+        courseRepository ?? AppDependencies.instance?.courseRepository;
+    final effectiveProgressRepo =
+        progressRepository ?? AppDependencies.instance?.progressRepository;
+
+    if (effectiveCourseRepo != null && effectiveProgressRepo != null) {
       return BlocProvider(
         create: (_) => CourseListCubit(
-          courseRepository: courseRepository!,
-          progressRepository: progressRepository!,
+          courseRepository: effectiveCourseRepo,
+          progressRepository: effectiveProgressRepo,
         )..loadCourses(),
         child: const _CourseListView(),
       );
@@ -262,10 +268,13 @@ class _CourseListViewState extends State<_CourseListView> {
                     if (!isSearching && state.hasContinueWatching) ...[
                       ContinueWatchingCard(
                         item: state.continueWatching!,
-                        onResume: () {
-                          context.push(
+                        onResume: () async {
+                          await context.push(
                             '/player?courseId=${state.continueWatching!.course.id}&lessonId=${state.continueWatching!.lesson.id}',
                           );
+                          if (context.mounted) {
+                            context.read<CourseListCubit>().refresh();
+                          }
                         },
                       ),
                       const SizedBox(height: 24),
@@ -300,8 +309,11 @@ class _CourseListViewState extends State<_CourseListView> {
                         child: CourseCard(
                           course: course,
                           progressPercentage: progress,
-                          onTap: () {
-                            context.push('/courses/${course.id}');
+                          onTap: () async {
+                            await context.push('/courses/${course.id}');
+                            if (context.mounted) {
+                              context.read<CourseListCubit>().refresh();
+                            }
                           },
                         ),
                       );

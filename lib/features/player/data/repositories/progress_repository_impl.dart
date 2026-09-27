@@ -217,6 +217,40 @@ class ProgressRepositoryImpl implements IProgressRepository {
     }
   }
 
+  /// Flushes any pending dirty progress and reloads in-memory cache from durable storage.
+  @override
+  Future<Either<Failure, void>> syncWithStorage() async {
+    try {
+      _debounceTimer?.cancel();
+      if (_isDirty) {
+        final flushResult = await flush();
+        if (flushResult.isLeft) {
+          return flushResult;
+        }
+      }
+
+      final envelope = onCorruptReset != null
+          ? dataSource.getEnvelope(
+              onCorruptReset: () {
+                _wasStorageReset = true;
+                onCorruptReset?.call();
+              },
+            )
+          : dataSource.getEnvelope();
+
+      _inMemoryCache = envelope.toDomainMap();
+      _isDirty = false;
+      return const Right(null);
+    } catch (e) {
+      return Left(
+        StorageFailure(
+          messageArabic: 'تعذر إعادة مزامنة سجل التقدم مع الذاكرة المحلية',
+          cause: e,
+        ),
+      );
+    }
+  }
+
   /// Immediately commits all in-memory changes to durable storage.
   @override
   Future<Either<Failure, void>> flush() async {

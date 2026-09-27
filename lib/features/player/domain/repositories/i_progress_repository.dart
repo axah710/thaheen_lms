@@ -42,6 +42,10 @@ abstract class IProgressRepository {
     List<Course> courses,
   );
 
+  /// Flushes any pending debounced writes and reloads the in-memory cache
+  /// from durable storage to synchronize with persistent state.
+  Future<Either<Failure, void>> syncWithStorage();
+
   /// Immediately flushes any pending debounced writes to durable storage.
   Future<Either<Failure, void>> flush();
 

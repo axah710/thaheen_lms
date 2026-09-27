@@ -93,3 +93,51 @@
   - Zero analysis issues via `flutter analyze --no-pub`.
   - Zero formatting discrepancies via `dart format .`.
   - Zero git whitespace issues via `git diff --check`.
+
+## 2026-09-27 - BUG-002: Progress Staleness & Multi-Screen Sync Fix (Singleton DI + PopScope flush)
+
+- **Status**: Completed
+- **Description**: Fixed two user-reported bugs: (1) after finishing a lesson, Home still showed it as unvisited until a manual force-quit; (2) after completing all lessons (100%), Home still displayed 67% until a full app restart. Root cause was multi-instance `ProgressRepositoryImpl` cache divergence — each page instantiated its own repository via independent `FutureBuilder<LocalStorageService>`, each with its own isolated `_inMemoryCache` that was never invalidated.
+- **Architecture**:
+  - Introduced singleton composition root `AppDependencies` (`lib/core/di/app_dependencies.dart`) providing shared `storageService`, `courseRepository`, and `progressRepository` across all routes.
+  - All three pages (`CourseListPage`, `CourseDetailsPage`, `LessonPlayerPage`) now check `AppDependencies.instance` before falling back to `FutureBuilder` — tests still work via constructor injection or `FutureBuilder` fallback when singleton is null.
+  - Added `syncWithStorage()` to `IProgressRepository` contract and `ProgressRepositoryImpl`: flushes dirty in-memory writes to disk first, then re-reads storage to update `_inMemoryCache` — breaking the permanent cache-never-invalidates bug.
+  - `CourseListCubit.refresh()` and `CourseDetailsCubit.refresh()` now call `await progressRepository.syncWithStorage()` before reloading.
+  - Navigation in `CourseListPage` (`onResume`, `onTap`) and `CourseDetailsPage` (`_onLessonSelected`) changed from fire-and-forget `context.push()` to `await context.push()` + `cubit.refresh()` on return.
+  - `_LessonPlayerView` wrapped in `PopScope(canPop: false)` to intercept all system/gesture pops and call `await cubit.progressRepository.flush()` before `Navigator.of(context).pop()`. `onBack`, `onReturn`, and the "إنهاء الدورة" completion button all `await flush()` before navigation.
+- **ADRs / Decisions**:
+  - [ADR-008](../decisions/008-singleton-progress-repository-and-cross-screen-sync.md): Singleton Progress Repository and Cross-Screen Synchronization.
+- **Bugs & fixes**:
+  - **Root Cause 1 — Multi-Instance Cache Divergence**: Each page created fresh `ProgressRepositoryImpl` instances via `FutureBuilder`. Each instance had independent `_inMemoryCache` never seen by other pages.
+  - **Root Cause 2 — Permanent Cache Staleness**: `_ensureLoaded()` only called `dataSource.getEnvelope()` once; cache was permanently frozen after first load even when `refresh()` was invoked.
+  - **Root Cause 3 — Un-Awaited Navigation**: `context.push()` was fire-and-forget; `refresh()` was never called after returning from player or details.
+  - **Root Cause 4 — Un-Flushed Route Pop**: `context.pop()` in the player ran before `flush()` completed, so the preceding route's `refresh()` read outdated disk state.
+  - **Fix**: Singleton DI + `syncWithStorage()` + awaited navigation + `PopScope` flush-before-pop.
+  - **Prevention**: Never instantiate `ProgressRepositoryImpl` inside widget `build()` or `FutureBuilder.builder`; always consume `AppDependencies.instance?.progressRepository`.
+- **Key facts**:
+  - `AppDependencies.bootstrap()` called once in `main()` before `runApp()`.
+  - `AppDependencies.instance` is null in test environments — pages fall back to constructor-injected repos; existing 102 tests remain unmodified.
+  - `@visibleForTesting static void setTestInstance(AppDependencies deps)` available for integration-test DI override.
+  - `syncWithStorage()`: flushes dirty writes first if `_isDirty == true`, then re-reads `dataSource.getEnvelope()`, resets `_isDirty = false`. Cost: 1 disk read per `refresh()` call.
+  - `PopScope(canPop: false)` wraps `_LessonPlayerView` — all exit paths await `flush()`: back gesture, `CustomVideoControls.onBack`, `InPlayerErrorCard.onReturn`, and "إنهاء الدورة" `ElevatedButton.onPressed`.
+  - Navigation pattern: `await context.push('/route'); if (context.mounted) { cubit.refresh(); }`
+- **Conventions**:
+  - Repositories are singletons provided by `AppDependencies`; pages must never instantiate `*RepositoryImpl` directly in `build()` when `AppDependencies.instance` is available.
+  - `PopScope(canPop: false)` is the canonical flush-gate pattern for any page that writes to `IProgressRepository`.
+  - `refresh()` on any cubit calls `syncWithStorage()` then re-loads; never call `syncWithStorage()` from initial `loadCourses()` / `loadCourseDetails()` to preserve mock contracts in unit tests.
+  - Tests mock `progressRepository` on `MockLessonPlayerCubit` and stub `flush()` → `Right(null)` in `setUp`.
+- **Diagrams / Flows**:
+  - Cross-screen sync flow: `main()` → `AppDependencies.bootstrap()` → Router wires singleton repos → `await context.push()` → `PopScope` intercepts pop → `await flush()` → `Navigator.pop()` → `cubit.refresh()` → `syncWithStorage()` → re-reads disk → UI reflects latest progress.
+- **Local development**:
+  - Hot restart required after changing `AppDependencies` or `main.dart` (singletons reinitialised).
+  - Hot reload sufficient for UI-only changes in list/details/player pages.
+  - Focused test: `flutter test --no-pub test/widget/lesson_player_screen_test.dart test/widget/course_list_screen_test.dart test/widget/persistence_lifecycle_test.dart`
+- **General notes**:
+  - `LessonPlayerCubit.close()` already calls `await progressRepository.flush()` in its dispose path — the `PopScope` flush is an additional guarantee for async BlocProvider disposal timing.
+  - The `FutureBuilder` fallback in all three pages is preserved to maintain hermetic widget tests.
+- **Validation**:
+  - 102 automated tests passing (100%).
+  - Zero analysis issues via `flutter analyze --no-pub`.
+  - Hot restart confirmed on iPhone 17 via DTD.
+- **Debt**:
+  - [DEBT-20260927000001](../debt/20260927000001-futurebuilder-fallback-dead-code.md): `FutureBuilder` fallback is dead code in production but retained for test hermiticity.

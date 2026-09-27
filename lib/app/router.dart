@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/di/app_dependencies.dart';
 import '../features/course/presentation/course_details_page.dart';
 import '../features/course/presentation/course_list_page.dart';
 import '../features/player/presentation/lesson_player_page.dart';
@@ -12,14 +13,21 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/courses',
       name: 'courses',
-      builder: (context, state) => const CourseListPage(),
+      builder: (context, state) => CourseListPage(
+        courseRepository: AppDependencies.instance?.courseRepository,
+        progressRepository: AppDependencies.instance?.progressRepository,
+      ),
       routes: [
         GoRoute(
           path: ':id',
           name: 'course_details',
           builder: (context, state) {
             final courseId = state.pathParameters['id'] ?? '';
-            return CourseDetailsPage(courseId: courseId);
+            return CourseDetailsPage(
+              courseId: courseId,
+              courseRepository: AppDependencies.instance?.courseRepository,
+              progressRepository: AppDependencies.instance?.progressRepository,
+            );
           },
         ),
       ],
@@ -36,7 +44,12 @@ final GoRouter appRouter = GoRouter(
         final lessonId =
             extra?['lessonId'] as String? ?? queryParams['lessonId'] ?? '';
 
-        return LessonPlayerPage(courseId: courseId, lessonId: lessonId);
+        return LessonPlayerPage(
+          courseId: courseId,
+          lessonId: lessonId,
+          courseRepository: AppDependencies.instance?.courseRepository,
+          progressRepository: AppDependencies.instance?.progressRepository,
+        );
       },
     ),
   ],

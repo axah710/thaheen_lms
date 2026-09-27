@@ -12,6 +12,9 @@ import '../data/data_sources/course_local_data_source.dart';
 import '../data/repositories/course_repository_impl.dart';
 import '../domain/entities/course.dart';
 import '../domain/entities/lesson.dart';
+import '../../../core/di/app_dependencies.dart';
+import '../domain/repositories/i_course_repository.dart';
+import '../../player/domain/repositories/i_progress_repository.dart';
 import 'widgets/empty_course_view.dart';
 import 'widgets/section_card.dart';
 
@@ -19,14 +22,38 @@ import 'widgets/section_card.dart';
 class CourseDetailsPage extends StatelessWidget {
   final String courseId;
   final CourseDetailsCubit? cubit;
+  final ICourseRepository? courseRepository;
+  final IProgressRepository? progressRepository;
 
-  const CourseDetailsPage({super.key, required this.courseId, this.cubit});
+  const CourseDetailsPage({
+    super.key,
+    required this.courseId,
+    this.cubit,
+    this.courseRepository,
+    this.progressRepository,
+  });
 
   @override
   Widget build(BuildContext context) {
     if (cubit != null) {
       return BlocProvider<CourseDetailsCubit>.value(
         value: cubit!,
+        child: const _CourseDetailsView(),
+      );
+    }
+
+    final effectiveCourseRepo =
+        courseRepository ?? AppDependencies.instance?.courseRepository;
+    final effectiveProgressRepo =
+        progressRepository ?? AppDependencies.instance?.progressRepository;
+
+    if (effectiveCourseRepo != null && effectiveProgressRepo != null) {
+      return BlocProvider(
+        create: (_) => CourseDetailsCubit(
+          courseId: courseId,
+          courseRepository: effectiveCourseRepo,
+          progressRepository: effectiveProgressRepo,
+        )..loadCourseDetails(),
         child: const _CourseDetailsView(),
       );
     }
@@ -43,10 +70,14 @@ class CourseDetailsPage extends StatelessWidget {
         }
 
         final storage = snapshot.data!;
-        final courseRepo = CourseRepositoryImpl(CourseLocalDataSource());
-        final progressRepo = ProgressRepositoryImpl(
-          ProgressLocalDataSource(storage),
-        );
+        final courseRepo =
+            effectiveCourseRepo ??
+            CourseRepositoryImpl(CourseLocalDataSource());
+        final progressRepo =
+            effectiveProgressRepo ??
+            ProgressRepositoryImpl(
+              ProgressLocalDataSource(storage),
+            );
 
         return BlocProvider(
           create: (_) => CourseDetailsCubit(

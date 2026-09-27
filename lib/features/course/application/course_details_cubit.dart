@@ -56,6 +56,9 @@ class CourseDetailsCubit extends Cubit<CourseDetailsState> {
     );
   }
 
-  /// Refreshes syllabus and unlock states.
-  Future<void> refresh() async => loadCourseDetails();
+  /// Refreshes syllabus and unlock states after synchronizing with durable storage.
+  Future<void> refresh() async {
+    await progressRepository.syncWithStorage();
+    await loadCourseDetails();
+  }
 }
