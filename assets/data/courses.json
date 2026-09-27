@@ -1,0 +1,87 @@
+{
+  "courses": [
+    {
+      "id": "anatomy-101",
+      "title": "مقدمة في التشريح",
+      "instructor": "د. سارة الأحمد",
+      "thumbnail": "assets/images/anatomy.png",
+      "sections": [
+        {
+          "id": "s1",
+          "title": "الجهاز الهيكلي",
+          "lessons": [
+            {
+              "id": "l1",
+              "title": "مقدمة في علم التشريح",
+              "durationSec": 120,
+              "video": "assets/videos/anatomy_intro.mp4"
+            },
+            {
+              "id": "l2",
+              "title": "هيكل الطرف العلوي والعظام",
+              "durationSec": 180,
+              "video": "assets/videos/anatomy_bones.mp4"
+            }
+          ]
+        },
+        {
+          "id": "s2",
+          "title": "الجهاز العضلي والمفصلي",
+          "lessons": [
+            {
+              "id": "l3",
+              "title": "وظائف العضلات وحركتها",
+              "durationSec": 150,
+              "video": "assets/videos/physiology_intro.mp4"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "physiology-101",
+      "title": "علم وظائف الأعضاء الأساسي",
+      "instructor": "د. عمر خالد",
+      "thumbnail": "assets/images/physiology.png",
+      "sections": [
+        {
+          "id": "s3",
+          "title": "الجهاز الدوري والدم",
+          "lessons": [
+            {
+              "id": "l4",
+              "title": "الدورة الدموية الكبرى والصغرى",
+              "durationSec": 140,
+              "video": "assets/videos/anatomy_intro.mp4"
+            },
+            {
+              "id": "l5",
+              "title": "ضغط الدم وتنظيم الدورة الدموية",
+              "durationSec": 160,
+              "video": "assets/videos/anatomy_bones.mp4"
+            }
+          ]
+        },
+        {
+          "id": "s4",
+          "title": "الجهاز العصبي والتنفسي",
+          "lessons": [
+            {
+              "id": "l6",
+              "title": "آلية التنفس وتبادل الغازات",
+              "durationSec": 130,
+              "video": "assets/videos/physiology_intro.mp4"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "empty-course-101",
+      "title": "دورة فارغة للاختبار",
+      "instructor": "المنسق التعليمي",
+      "thumbnail": "assets/images/placeholder.png",
+      "sections": []
+    }
+  ]
+}

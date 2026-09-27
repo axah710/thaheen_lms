@@ -1,0 +1,48 @@
+# Work Log & Task History
+
+## 2026-09-26 - SPEC-001 / BUG-001: Offline LMS Feature Delivery & Controls Overflow Resolution
+
+- **Status**: Completed
+- **Description**: Delivered complete Mini Offline LMS with Video Player for health-sciences students, fulfilling Constitution v1.0.0, the 14-point remediation plan, and Clean Architecture conventions. Followed up by resolving a 2.9px `RenderFlex` bottom overflow in `CustomVideoControls` inside fixed 16:9 viewports.
+- **Architecture**:
+  - Feature-first Clean Architecture across `course`, `player`, and `core`.
+  - Pure Dart domain layer with zero Flutter rendering dependencies: immutable entities (`Course`, `Section`, `Lesson`, `CourseProgress`, `LessonProgress`) and typed `Either<Failure, T>` returns.
+  - Three specialized Cubits (`CourseListCubit`, `CourseDetailsCubit`, `LessonPlayerCubit`) with fail-safe `emitSafe` state emission guarding against post-closure exceptions.
+  - Durable persistence via `LocalStorageService` and `ProgressRepositoryImpl` with 5s continuous playback debounce and immediate write-through buffer flushing.
+  - Full-stack error tolerance via `InPlayerErrorCard`, `EmptyCourseView`, and top-level `CustomErrorWidget` overriding `ErrorWidget.builder`.
+- **ADRs / Decisions**:
+  - [ADR-001](../decisions/001-hermetic-offline-asset-architecture.md): 100% Hermetic Offline Asset Architecture.
+  - [ADR-002](../decisions/002-pure-dart-domain-layer-and-invariants.md): Pure Dart Domain Layer and Pedagogical Invariants.
+  - [ADR-003](../decisions/003-arabic-first-rtl-ergonomics-and-unmirrored-media-controls.md): Arabic-First RTL Ergonomics and Unmirrored Media Controls.
+  - [ADR-004](../decisions/004-durable-local-persistence-and-lifecycle-flushing.md): Durable Local Persistence and Lifecycle Write-Through Buffer.
+  - [ADR-005](../decisions/005-zero-red-screens-resilience-and-error-boundaries.md): Zero Red Screens Fault Tolerance and Global Error Boundary.
+  - [ADR-006](../decisions/006-adaptive-flex-video-controls-layout.md): Adaptive Flex Video Controls Layout (Preventing 16:9 RenderFlex Overflows).
+- **Bugs & fixes**:
+  - [BUG-001](../bugs/BUG-001-custom-video-controls-renderflex-overflow.md): `CustomVideoControls` overflowed by 2.9 pixels on the bottom in portrait mode when rendered inside a 16:9 aspect ratio container ($390\text{px} \times 9 / 16 \approx 219.4\text{px}$). Fixed by moving the fullscreen toggle inline with `RtlSeekBar`'s timestamp row (removing a 48px row), wrapping the center play/pause button in `Expanded(child: Center(child: FittedBox(...)))`, and constraining `SafeArea` insets to fullscreen mode only. Added regression widget test in `test/widget/lesson_player_screen_test.dart`.
+- **Key facts**:
+  - Storage key: `thaheen_progress_v1` in `SharedPreferences`.
+  - Auto-completion threshold: $\ge 90.0\%$ (`positionSec >= (0.90 * durationSec).ceil()`).
+  - Speed options: Discrete cycling between $1.0\text{x}$, $1.25\text{x}$, $1.5\text{x}$, $2.0\text{x}$, and wrapping to $1.0\text{x}$.
+  - Numerals: Strictly Western Arabic (`0-9`) across all timestamps, speeds, and badges.
+  - Directionality: Global `TextDirection.rtl` with directional paddings (`EdgeInsetsDirectional`).
+  - Quality command: `dart format --output=none --set-exit-if-changed . && flutter analyze --no-pub && flutter test --no-pub && git diff --check`.
+- **Conventions**:
+  - Entities under `domain/entities/` are immutable and pure Dart.
+  - Interfaces under `domain/repositories/` prefixed with `i_`.
+  - Repositories return `Either<Failure, T>` from `package:either_dart`.
+  - Cubits inherit safe emission pattern via `emitSafe(state)` checking `!isClosed`.
+  - Media controls icons (`play_arrow_rounded`, `pause_rounded`, `replay_10_rounded`, `forward_10_rounded`) must have `matchTextDirection: false`.
+- **Diagrams / Flows**:
+  - Detailed in [System Flows](../general/system-flows.md).
+- **Local development**:
+  - Run via `flutter run` on Android, iOS, or macOS desktop.
+  - Test suites: `flutter test --no-pub test/unit/`, `flutter test --no-pub test/widget/`.
+  - Hermetic offline test: `flutter test --no-pub test/unit/core/hermetic_offline_network_test.dart`.
+- **Validation**:
+  - 86 automated unit and widget tests passing (100%).
+  - 0 static analysis warnings (`flutter analyze --no-pub`).
+  - 0 formatting discrepancies (`dart format --output=none --set-exit-if-changed .`).
+  - 0 git whitespace violations (`git diff --check`).
+- **Debt**:
+  - [20260926000000-bundled-video-asset-size.md](../debt/20260926000000-bundled-video-asset-size.md): Bundled video assets increase initial app binary size.
+  - [20260926000001-single-active-course-continue-watching.md](../debt/20260926000001-single-active-course-continue-watching.md): Home screen displays single most-recently accessed unfinished lesson rather than multi-course carousel.
