@@ -31,7 +31,7 @@
   - Interfaces under `domain/repositories/` prefixed with `i_`.
   - Repositories return `Either<Failure, T>` from `package:either_dart`.
   - Cubits inherit safe emission pattern via `emitSafe(state)` checking `!isClosed`.
-  - Media controls icons (`play_arrow_rounded`, `pause_rounded`, `replay_10_rounded`, `forward_10_rounded`) must have `matchTextDirection: false`.
+  - Media controls icons (`play_arrow_rounded`, `pause_rounded`) must have `matchTextDirection: false`.
 - **Diagrams / Flows**:
   - Detailed in [System Flows](../general/system-flows.md).
 - **Local development**:
@@ -46,3 +46,50 @@
 - **Debt**:
   - [20260926000000-bundled-video-asset-size.md](../debt/20260926000000-bundled-video-asset-size.md): Bundled video assets increase initial app binary size.
   - [20260926000001-single-active-course-continue-watching.md](../debt/20260926000001-single-active-course-continue-watching.md): Home screen displays single most-recently accessed unfinished lesson rather than multi-course carousel.
+
+## 2026-09-27 - BONUS-SEARCH & CODE-HEALTH: Arabic Course Search, Domain Purity & Docs Alignment
+
+- **Status**: Completed
+- **Description**: Resolved Clean Architecture layer inversion, refactored code smells, eliminated documentation drift, and delivered the screening task bonus feature "- Search courses." with pure Dart Arabic normalization, persistent search bar, and zero-match recovery.
+- **Architecture**:
+  - **Domain Purity**: Extracted `ContinueWatchingItem` to `lib/features/course/domain/entities/continue_watching_item.dart` as an immutable pure Dart entity extending `Equatable`. Re-exported via `application/models/` for backwards compatibility, resolving inward dependency inversion in `IProgressRepository` and `ProgressRepositoryImpl`.
+  - **Normalization Engine**: Created pure Dart `ArabicSearchHelper` in `core/utils/` with zero Flutter dependencies, handling tashkeel stripping, tatweel removal, alef unification (`[أإآٱ] -> ا`), taa marbuta (`ة -> ه`), and alef maqsura (`ى -> ي`).
+  - **Application State**: Extended `CourseListLoaded` with `searchQuery`, `isSearching`, and computed `filteredCourses` getter; added `search(query)` and `clearSearch()` to `CourseListCubit`.
+  - **Presentation Layer**: Built `CourseSearchBar` with RTL ergonomics, hint copy, and clear action; built `EmptySearchView` for zero-match states; integrated hero card suppression during active search.
+- **ADRs / Decisions**:
+  - [ADR-007](../decisions/007-course-search-with-arabic-normalization-and-in-memory-filtering.md): Course Search with Arabic Normalization and In-Memory Filtering. Chose synchronous in-memory filtering over SQLite FTS5 or debounced streams to maintain 100% hermetic offline JSON architecture with zero latency for catalogs <500 courses.
+  - Updated [ADR-002](../decisions/002-pure-dart-domain-layer-and-invariants.md): Replaced superlatives with objective claims and clarified sequential unlock evaluation via `globalOrderIndex`.
+  - Updated [ADR-005](../decisions/005-zero-red-screens-resilience-and-error-boundaries.md): Aligned `CustomErrorWidget` description with code, clarifying development debug diagnostics rather than an unbuilt restart button.
+- **Bugs & fixes**:
+  - Fixed layer inversion where domain repository depended on application model.
+  - Stripped unreachable dead catch code `if (e is AssetBundleFailure) rethrow;` in `CourseLocalDataSource.loadCourses()`.
+  - Renamed single-letter and non-descriptive parameters across DTOs and data sources (`s` -> `sectionJson`/`section`, `l` -> `lessonJson`/`lesson`, `item` -> `courseJson`).
+  - Aligned toast string in `docs/general/system-flows.md` with `LockedLessonSnackBar.canonicalMessage` (`'يجب إكمال الدرس السابق أولاً لفتح هذا الدرس'`).
+- **Key facts**:
+  - Normalization regexes: Tashkeel `[\u064B-\u065F\u0670]`, Tatweel `\u0640`, Alef `[أإآٱ]`.
+  - Search fields: `course.title` and `course.instructor`.
+  - Active search suppresses `ContinueWatchingCard` to maximize vertical space for search results.
+  - Quality commands: `dart format --output=none --set-exit-if-changed . && flutter analyze --no-pub && flutter test --no-pub && git diff --check`.
+  - Test count: 102 passed (100%).
+- **Conventions**:
+  - Domain layer must remain pure Dart with zero dependencies on application models or Flutter UI widgets.
+  - Search and text utilities in `core/utils/` must be pure Dart, stateless, and fully unit-tested with AAA pattern.
+  - Arabic input widgets must specify `textDirection: TextDirection.rtl` and use `AppTheme` design tokens.
+- **Diagrams / Flows**:
+  - Added Section 6 to [System Flows](../general/system-flows.md): "Course Search & Arabic Normalization Flow" detailing the search dispatch, normalization pipeline, filtering branch, and empty state recovery.
+- **Local development**:
+  - Run search unit tests: `flutter test --no-pub test/unit/core/arabic_search_helper_test.dart test/unit/application/course_list_cubit_test.dart`.
+  - Run catalog widget tests: `flutter test --no-pub test/widget/course_list_screen_test.dart`.
+  - Hot reload rule: proactively check active DTD instance via `dtd` tool before and after modifying files in `lib/`.
+- **General notes**:
+  - Audited against code-refactorer, clean-code-guard, docs-guard, and test-guard; new refinement edits remain strictly unstaged in working tree.
+  - All 102 tests pass with 0 warnings in `flutter analyze`.
+- **Debt**:
+  - [DEBT-20260926000000](../debt/20260926000000-bundled-video-asset-size.md): Bundled video assets size (~30-40 MB).
+  - [DEBT-20260926000001](../debt/20260926000001-single-active-course-continue-watching.md): Single active course hero card vs multi-course carousel.
+  - [DEBT-20260927000000](../debt/20260927000000-in-memory-catalog-search-scalability.md): In-memory linear search scalability — suitable for <100 courses; requires SQLite FTS5 inverted indexing if full-text transcripts or 100+ courses are introduced.
+- **Validation**:
+  - 102 automated unit and widget tests passing (100%).
+  - Zero analysis issues via `flutter analyze --no-pub`.
+  - Zero formatting discrepancies via `dart format .`.
+  - Zero git whitespace issues via `git diff --check`.

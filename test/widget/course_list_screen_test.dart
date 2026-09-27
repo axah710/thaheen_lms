@@ -13,6 +13,8 @@ import 'package:thaheen_lms/features/course/domain/entities/section.dart';
 import 'package:thaheen_lms/features/course/presentation/course_list_page.dart';
 import 'package:thaheen_lms/features/course/presentation/widgets/continue_watching_card.dart';
 import 'package:thaheen_lms/features/course/presentation/widgets/course_card.dart';
+import 'package:thaheen_lms/features/course/presentation/widgets/course_search_bar.dart';
+import 'package:thaheen_lms/features/course/presentation/widgets/empty_search_view.dart';
 import 'package:thaheen_lms/features/player/domain/entities/lesson_progress.dart';
 
 class MockCourseListCubit extends MockCubit<CourseListState>
@@ -191,5 +193,128 @@ void main() {
       expect(find.text('تعذر الاتصال بملف البيانات المحلي'), findsOneWidget);
       expect(find.text('إعادة المحاولة'), findsOneWidget);
     });
+
+    testWidgets(
+      'renders persistent CourseSearchBar and dispatches search on input',
+      (tester) async {
+        // Arrange
+        when(() => mockCubit.state).thenReturn(
+          CourseListLoaded(
+            courses: [testCourse],
+            progressPercentages: const {'c1': 0},
+          ),
+        );
+        when(() => mockCubit.search(any())).thenReturn(null);
+
+        // Act
+        await tester.pumpWidget(
+          buildTestableWidget(child: CourseListPage(cubit: mockCubit)),
+        );
+        await tester.pump();
+
+        // Assert search bar is present
+        expect(find.byType(CourseSearchBar), findsOneWidget);
+        expect(find.text('ابحث عن دورة أو محاضر...'), findsOneWidget);
+
+        // Act: enter text
+        await tester.enterText(find.byType(TextField), 'تشريح');
+        await tester.pump();
+
+        // Assert: cubit.search called
+        verify(() => mockCubit.search('تشريح')).called(1);
+      },
+    );
+
+    testWidgets(
+      'renders search results header and filters list when searchQuery is active',
+      (tester) async {
+        // Arrange
+        final secondCourse = Course(
+          id: 'c2',
+          title: 'علم الأدوية',
+          instructor: 'د. خالد',
+          thumbnail: 'assets/images/placeholder.png',
+          sections: const [],
+        );
+
+        final cwItem = ContinueWatchingItem(
+          course: testCourse,
+          lesson: testLesson,
+          progress: LessonProgress(
+            lessonId: 'l1',
+            courseId: 'c1',
+            lastPositionSec: 30,
+            isCompleted: false,
+            lastAccessedAt: DateTime.utc(2026, 9, 25),
+          ),
+        );
+
+        when(() => mockCubit.state).thenReturn(
+          CourseListLoaded(
+            courses: [testCourse, secondCourse],
+            progressPercentages: const {'c1': 50, 'c2': 0},
+            continueWatching: cwItem,
+            searchQuery: 'تشريح',
+          ),
+        );
+
+        // Act
+        await tester.pumpWidget(
+          buildTestableWidget(child: CourseListPage(cubit: mockCubit)),
+        );
+        await tester.pump();
+
+        // Assert: ContinueWatchingCard is hidden during search
+        expect(find.byType(ContinueWatchingCard), findsNothing);
+
+        // Assert: Search header with count
+        expect(find.text('نتائج البحث (1)'), findsOneWidget);
+
+        // Assert: only matching course card is rendered
+        expect(find.text('علم التشريح البشري'), findsOneWidget);
+        expect(find.text('علم الأدوية'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'renders EmptySearchView and handles clear when search has zero matches',
+      (tester) async {
+        // Arrange
+        when(() => mockCubit.state).thenReturn(
+          CourseListLoaded(
+            courses: [testCourse],
+            progressPercentages: const {'c1': 0},
+            searchQuery: 'كيمياء',
+          ),
+        );
+        when(() => mockCubit.clearSearch()).thenReturn(null);
+
+        // Act
+        await tester.pumpWidget(
+          buildTestableWidget(child: CourseListPage(cubit: mockCubit)),
+        );
+        await tester.pump();
+
+        // Assert: EmptySearchView rendered with clear action
+        expect(find.byType(EmptySearchView), findsOneWidget);
+        expect(find.text('لا توجد نتائج تطابق بحثك'), findsOneWidget);
+        expect(
+          find.text(
+            'لم نعثر على دورات تطابق "كيمياء". يرجى المحاولة بكلمات أخرى.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('مسح البحث وتصفح الكل'), findsOneWidget);
+
+        // Act: tap clear button in EmptySearchView via observable Arabic text
+        await tester.tap(
+          find.widgetWithText(OutlinedButton, 'مسح البحث وتصفح الكل'),
+        );
+        await tester.pump();
+
+        // Assert: clearSearch was called
+        verify(() => mockCubit.clearSearch()).called(1);
+      },
+    );
   });
 }

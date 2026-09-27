@@ -15,7 +15,6 @@ classDiagram
         +String thumbnail
         +List~Section~ sections
         +List~Lesson~ allLessonsOrdered
-        +int totalDurationSec
         +int totalLessonsCount
     }
 
@@ -25,7 +24,6 @@ classDiagram
         +String title
         +int orderIndex
         +List~Lesson~ lessons
-        +int totalDurationSec
     }
 
     class Lesson {
@@ -41,8 +39,8 @@ classDiagram
     class CourseProgress {
         +String courseId
         +Map~String, LessonProgress~ lessonProgressMap
-        +int completedCount
-        +int progressPercentage
+        +int completedLessonsCount
+        +calculateOverallProgress(int totalLessons) int
     }
 
     class LessonProgress {
@@ -108,7 +106,7 @@ sequenceDiagram
 
     User->>Player: Play Video
     loop Every 500ms Playback Tick
-        Player->>Cubit: onPositionChanged(pos)
+        Player->>Cubit: _onControllerTick(pos)
         Cubit->>Repo: recordPlaybackPosition(pos)
         Note over Repo: Accumulate in memory buffer
     end
@@ -141,9 +139,65 @@ flowchart TD
     Check -- Video Corrupt / Missing --> CatchInCubit[Catch PlatformException in Cubit]
     CatchInCubit --> InPlayerCard[Render InPlayerErrorCard:\nArabic Message + Retry + Return Actions]
     
-    Check -- Course Has 0 Lessons --> SafeCalc[CourseProgressCalculator: 0% Progress]
+    Check -- Course Has 0 Lessons --> SafeCalc[Course.calculateProgressPercentage: 0% Progress]
     SafeCalc --> EmptyView[Render EmptyCourseView:\n'لا توجد دروس متاحة حالياً في هذه الدورة']
     
     Check -- Unhandled Widget Crash --> Boundary[Top-Level CustomErrorWidget Interceptor]
     Boundary --> CrashCard[Render Arabic Fallback Card with Dignified Error Copy]
+```
+
+---
+
+## 6. Course Search & Arabic Normalization Flow
+
+```mermaid
+flowchart TD
+    Start([User Types in CourseSearchBar]) --> InputEvent["Dispatch onChanged(query) to CourseListCubit"]
+    InputEvent --> CubitSearch["CourseListCubit.search(query)"]
+    CubitSearch --> CheckQuery{"Is query.trim() Empty?"}
+
+    %% Inactive / Cleared Search Branch
+    CheckQuery -- "Yes (isSearching = false)" --> RestoreState["Emit CourseListLoaded(searchQuery: '')"]
+    RestoreState --> ShowHero["Render Continue Watching Card (if present)"]
+    ShowHero --> ShowAllCatalog["Render Header: 'جميع الدورات المتاحة'\nRender All Courses"]
+
+    %% Active Search Branch
+    CheckQuery -- "No (isSearching = true)" --> EmitSearchState["Emit CourseListLoaded(searchQuery: query)"]
+    EmitSearchState --> SuppressHero["Suppress Continue Watching Card"]
+    SuppressHero --> ExecFilter["Execute CourseListLoaded.filteredCourses"]
+
+    %% Normalization & Matching
+    ExecFilter --> NormQuery["Normalize Query via ArabicSearchHelper"]
+    NormQuery --> LoopCourses["Iterate through state.courses"]
+    LoopCourses --> NormCourse["Normalize course.title & course.instructor"]
+
+    subgraph NormalizationPipeline ["Arabic Normalization Pipeline (ArabicSearchHelper.normalize)"]
+        direction TB
+        N1["1. Strip Tashkeel & Diacritics (Tanween, Fatha, Damma, Kasra, Shadda, Sukun)"]
+        N2["2. Remove Tatweel / Kashida (U+0640)"]
+        N3["3. Unify Alef Variants (أ, إ, آ, ٱ -> ا)"]
+        N4["4. Normalize Taa Marbuta (ة -> ه)"]
+        N5["5. Normalize Alef Maqsura (ى -> ي)"]
+        N6["6. Case Fold (toLowerCase) & Whitespace Trim"]
+        N1 --> N2 --> N3 --> N4 --> N5 --> N6
+    end
+
+    NormCourse -.-> NormalizationPipeline
+    NormQuery -.-> NormalizationPipeline
+
+    NormCourse --> SubstringMatch{"Does Normalized Title OR\nNormalized Instructor contain Query?"}
+    SubstringMatch -- "Yes" --> IncludeCourse["Include Course in filteredCourses"]
+    SubstringMatch -- "No" --> ExcludeCourse["Exclude Course"]
+
+    IncludeCourse --> CheckMatches{"filteredCourses.isNotEmpty?"}
+    ExcludeCourse --> CheckMatches
+
+    %% Presentation Feedback Branch
+    CheckMatches -- "Yes (Matches Found)" --> RenderResults["Render Header: 'نتائج البحث (N)'\nRender Filtered CourseCards"]
+    CheckMatches -- "No (Zero Matches)" --> RenderEmpty["Render EmptySearchView Fallback Card\n(Zero Red Screens Resilience)"]
+
+    RenderEmpty --> EmptyActions["Display Arabic Copy: 'لا توجد نتائج تطابق بحثك'\nAction: 'مسح البحث وتصفح الكل'"]
+    EmptyActions --> TapClear["User Taps Clear Button"]
+    TapClear --> ClearSearch["CourseListCubit.clearSearch()"]
+    ClearSearch --> RestoreState
 ```

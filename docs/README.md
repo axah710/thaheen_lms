@@ -20,7 +20,8 @@ docs/
 │   ├── 003-arabic-first-rtl-ergonomics-and-unmirrored-media-controls.md
 │   ├── 004-durable-local-persistence-and-lifecycle-flushing.md
 │   ├── 005-zero-red-screens-resilience-and-error-boundaries.md
-│   └── 006-adaptive-flex-video-controls-layout.md
+│   ├── 006-adaptive-flex-video-controls-layout.md
+│   └── 007-course-search-with-arabic-normalization-and-in-memory-filtering.md
 ├── bugs/
 │   ├── README.md                  # Bug index and post-mortem register
 │   └── BUG-001-custom-video-controls-renderflex-overflow.md
@@ -32,7 +33,8 @@ docs/
 │   └── system-flows.md            # Mermaid diagrams for domain, state, and persistence
 ├── debt/
 │   ├── 20260926000000-bundled-video-asset-size.md
-│   └── 20260926000001-single-active-course-continue-watching.md
+│   ├── 20260926000001-single-active-course-continue-watching.md
+│   └── 20260927000000-in-memory-catalog-search-scalability.md
 └── local_development/
     └── local-setup.md             # Developer environment setup & troubleshooting
 ```

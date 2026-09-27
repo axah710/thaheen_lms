@@ -14,6 +14,8 @@ import '../domain/repositories/i_course_repository.dart';
 import '../../player/domain/repositories/i_progress_repository.dart';
 import 'widgets/continue_watching_card.dart';
 import 'widgets/course_card.dart';
+import 'widgets/course_search_bar.dart';
+import 'widgets/empty_search_view.dart';
 
 /// Screen displaying the courses catalog and "Continue Watching" hero card.
 class CourseListPage extends StatelessWidget {
@@ -94,8 +96,32 @@ class CourseListPage extends StatelessWidget {
   }
 }
 
-class _CourseListView extends StatelessWidget {
+class _CourseListView extends StatefulWidget {
   const _CourseListView();
+
+  @override
+  State<_CourseListView> createState() => _CourseListViewState();
+}
+
+class _CourseListViewState extends State<_CourseListView> {
+  late final TextEditingController _searchController;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    context.read<CourseListCubit>().clearSearch();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -106,22 +132,30 @@ class _CourseListView extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'تحديث الدورات',
-            onPressed: () => context.read<CourseListCubit>().refresh(),
+            onPressed: () {
+              _clearSearch();
+              context.read<CourseListCubit>().refresh();
+            },
           ),
         ],
       ),
       body: BlocListener<CourseListCubit, CourseListState>(
         listener: (context, state) {
-          if (state is CourseListLoaded && state.storageWasReset) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'تمت إعادة ضبط سجل التعلم المحلي لسلامة البيانات',
-                  textAlign: TextAlign.right,
+          if (state is CourseListLoaded) {
+            if (state.storageWasReset) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'تمت إعادة ضبط سجل التعلم المحلي لسلامة البيانات',
+                    textAlign: TextAlign.right,
+                  ),
+                  backgroundColor: AppTheme.warningAmber,
                 ),
-                backgroundColor: AppTheme.warningAmber,
-              ),
-            );
+              );
+            }
+            if (!state.isSearching && _searchController.text.isNotEmpty) {
+              _searchController.clear();
+            }
           }
         },
         child: BlocBuilder<CourseListCubit, CourseListState>(
@@ -203,14 +237,29 @@ class _CourseListView extends StatelessWidget {
                 );
               }
 
+              final filteredCourses = state.filteredCourses;
+              final isSearching = state.isSearching;
+
               return RefreshIndicator(
                 color: AppTheme.primaryTeal,
-                onRefresh: () => context.read<CourseListCubit>().refresh(),
+                onRefresh: () async {
+                  await context.read<CourseListCubit>().refresh();
+                },
                 child: ListView(
                   padding: const EdgeInsetsDirectional.all(16),
                   children: [
-                    // Continue watching hero card if available
-                    if (state.hasContinueWatching) ...[
+                    // Persistent Arabic Search Bar
+                    CourseSearchBar(
+                      controller: _searchController,
+                      onChanged: (query) {
+                        context.read<CourseListCubit>().search(query);
+                      },
+                      onClear: _clearSearch,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Continue watching hero card if available and not searching
+                    if (!isSearching && state.hasContinueWatching) ...[
                       ContinueWatchingCard(
                         item: state.continueWatching!,
                         onResume: () {
@@ -223,9 +272,11 @@ class _CourseListView extends StatelessWidget {
                     ],
 
                     // Header
-                    const Text(
-                      'جميع الدورات المتاحة',
-                      style: TextStyle(
+                    Text(
+                      isSearching
+                          ? 'نتائج البحث (${filteredCourses.length})'
+                          : 'جميع الدورات المتاحة',
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: AppTheme.textPrimary,
@@ -233,12 +284,19 @@ class _CourseListView extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
 
+                    // Empty Search State
+                    if (isSearching && filteredCourses.isEmpty)
+                      EmptySearchView(
+                        query: state.searchQuery,
+                        onClear: _clearSearch,
+                      ),
+
                     // Courses list
-                    ...state.courses.map((course) {
+                    ...filteredCourses.map((course) {
                       final progress =
                           state.progressPercentages[course.id] ?? 0;
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsetsDirectional.only(bottom: 16),
                         child: CourseCard(
                           course: course,
                           progressPercentage: progress,

@@ -11,7 +11,7 @@
 | **App Name** | `thaheen_lms` (Thaheen Mini Offline LMS) |
 | **Target Audience** | Medical and health-sciences students |
 | **Flutter SDK** | `>=3.19.0` (stable) |
-| **Dart SDK** | `>=3.3.0` (null-safe) |
+| **Dart SDK** | `^3.13.0` (null-safe) |
 | **Target Platforms** | Android (API 21+), iOS (iOS 12+), macOS desktop |
 | **State Management** | BLoC / Cubit (`flutter_bloc: ^8.1.3`) |
 | **Functional Error Handling** | Either / Left / Right (`either_dart: ^1.0.0`) |
@@ -42,8 +42,8 @@
   ```
 - **Debounce Window**: 5.0 seconds for continuous playback updates.
 - **Immediate Write-Through Triggers**:
-  - Video pause (`togglePlayPause()` / `pause()`).
-  - Seek bar drag release (`onSeekEnd`).
+  - Video pause (`togglePlayPause()`).
+  - Seek bar scrub completion (`seekTo()`).
   - 90% auto-completion threshold crossing.
   - Page exit / back navigation (`pop()`).
   - Flutter lifecycle state transitions: `paused`, `inactive`, `hidden`, and `detached`.
@@ -66,7 +66,7 @@
   - Lesson $N$ ($N > 1$) is locked (`LessonStatus.locked`) until Lesson $N-1$ is `LessonStatus.completed`.
   - Unlocking seamlessly crosses section boundaries according to `globalOrderIndex`.
 - **Progress Percentage Math**:
-  $$\text{Progress} = \text{clamp}\left(\left\lfloor \frac{\text{Completed Lessons}}{\text{Total Lessons}} \times 100 \right\rfloor, 0, 100\right)$$
+  $$\text{Progress} = \text{clamp}\left(\text{round}\left( \frac{\text{Completed Lessons}}{\text{Total Lessons}} \times 100 \right), 0, 100\right)$$
   - Empty courses (0 lessons) evaluate strictly to $0\%$.
 
 ---
@@ -76,7 +76,7 @@
 - **Primary Locale**: Arabic (`ar`).
 - **Directionality**: Global `TextDirection.rtl`.
 - **Numerals**: Strictly Western Arabic (`0-9`) across all timestamps (`00:42`), speeds (`1.25x`), and percentages (`33%`). Eastern Arabic digits (`٠-٩`) are banned to avoid medical/metric ambiguity.
-- **Unmirrored Media Controls**: Universal physical time conventions are enforced (`matchTextDirection: false` on `play_arrow_rounded`, `pause_rounded`, `replay_10_rounded`, `forward_10_rounded`).
+- **Unmirrored Media Controls**: Universal physical time conventions are enforced (`matchTextDirection: false` on `play_arrow_rounded` and `pause_rounded`).
 - **Directional Navigation Icons**: Directional chevrons point in natural reading direction (`matchTextDirection: true` on `arrow_back_rounded` $\rightarrow$ points right in RTL).
 
 ---
@@ -102,7 +102,23 @@ assets/
 
 ---
 
-## 6. Authoritative Quality Gate Commands
+## 6. Arabic Search & Normalization Engine
+
+- **Normalization Utility**: `ArabicSearchHelper` (`lib/core/utils/arabic_search_helper.dart`).
+- **Linguistic Rules**:
+  - **Diacritics (Tashkeel)**: Strips `[\u064B-\u065F\u0670]` (Tanween, Fathah, Dammah, Kasrah, Shaddah, Sukun, superscript Alef).
+  - **Tatweel (Kashida)**: Strips `\u0640`.
+  - **Alef Variants**: Unifies `[أإآٱ]` to bare Alef `ا`.
+  - **Taa Marbuta**: Normalizes `ة` to `ه`.
+  - **Alef Maqsura**: Normalizes `ى` to `ي`.
+  - **Casing & Trimming**: Lowercases Latin characters (acronyms) and trims whitespace.
+- **Search Scope**: Evaluates matches across `course.title` and `course.instructor`.
+- **Hero Card State**: Suppressed when `isSearching = true` to maximize search result visibility.
+- **Empty State**: Renders `EmptySearchView` when zero courses match with single-tap catalog reset.
+
+---
+
+## 7. Authoritative Quality Gate Commands
 
 ```bash
 # 1. Format check
@@ -114,7 +130,7 @@ flutter analyze --no-pub
 # 3. Hermetic offline network enforcement test
 flutter test --no-pub test/unit/core/hermetic_offline_network_test.dart
 
-# 4. Full test suite execution (86 tests)
+# 4. Full test suite execution (102 tests)
 flutter test --no-pub
 
 # 5. Git diff whitespace hygiene check

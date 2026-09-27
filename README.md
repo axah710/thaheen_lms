@@ -5,14 +5,14 @@
 [![Flutter](https://img.shields.io/badge/Flutter-3.19+-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.3+-0175C2?logo=dart&logoColor=white)](https://dart.dev)
 [![Architecture](https://img.shields.io/badge/Architecture-Clean%20Architecture%20%2B%20BLoC%2FCubit-green)](https://bloclibrary.dev)
-[![Tests](https://img.shields.io/badge/Tests-86%20Passed%20(100%25)-success)](test/)
+[![Tests](https://img.shields.io/badge/Tests-102%20Passed%20(100%25)-success)](test/)
 [![Offline](https://img.shields.io/badge/Network-100%25%20Hermetic%20Offline-orange)](test/unit/core/hermetic_offline_network_test.dart)
 
 ---
 
 ## 1. Overview & Architectural Vision
 
-**Thaheen LMS** is designed specifically for medical and health-sciences students who study demanding curricula in clinical environments with unreliable or non-existent internet connectivity. The application operates in **100% hermetic offline mode**—all course curricula, structured sections, lessons, metadata, and high-definition video assets are packaged directly into the application bundle.
+**Thaheen LMS** is designed specifically for medical and health-sciences students who study demanding curricula in clinical environments with unreliable or non-existent internet connectivity. The application operates in **100% hermetic offline mode**—all course curricula, structured sections, lessons, metadata, and sample course video clips are packaged directly into the application bundle.
 
 The architecture enforces strict separation of concerns, deterministic domain invariants, right-to-left (RTL) ergonomics, durable background persistence, and a resilient "Zero Red Screens" fault-tolerance guarantee.
 
@@ -34,33 +34,41 @@ The domain layer (`lib/features/course/domain/` and `lib/features/player/domain/
 2. **Sequential Unlock Rule Across Sections**:
    - Lesson 1 in Section 1 is unlocked by default for any enrolled course.
    - For all subsequent lessons ($N > 1$), Lesson $N$ is unlocked if and only if Lesson $N-1$ has achieved `Completed` status.
-   - Unlocking seamlessly crosses section boundaries according to the global syllabus order.
+   - Unlocking crosses section boundaries according to the global syllabus order (`globalOrderIndex`).
 3. **Deterministic Progress Calculation**:
    - Course progress percentage is calculated as:
-     $$\text{Progress} = \text{clamp}\left(\left\lfloor \frac{\text{Completed Lessons}}{\text{Total Lessons}} \times 100 \right\rfloor, 0, 100\right)$$
+     $$\text{Progress} = \text{clamp}\left(\text{round}\left( \frac{\text{Completed Lessons}}{\text{Total Lessons}} \times 100 \right), 0, 100\right)$$
    - Courses with 0 lessons safely return $0\%$ progress without throwing `NaN` or unhandled exceptions.
 
 ### 2.3 Arabic-First Right-to-Left (RTL) Ergonomics
 - The UI defaults unconditionally to `TextDirection.rtl` with Arabic copy.
 - Directional layout uses `EdgeInsetsDirectional` (start/end) to maintain symmetrical gutters and margins.
 - **Directional Navigation Chevrons**: Navigational back and forward chevrons point in the natural reading direction ($\rightarrow$ for back).
-- **Unmirrored Media Controls**: Universal physical time conventions are preserved—media playback controls (play `▶`, pause `⏸`, forward $+10\text{s}$, rewind $-10\text{s}$) remain unmirrored.
+- **Unmirrored Media Controls**: Universal physical time conventions are preserved—media playback controls (play `▶`, pause `⏸`, and seek bar scrub direction) remain unmirrored.
 - **Western Arabic Numerals (`0-9`)**: Timestamps, durations, speeds, and percentages use clean Western Arabic digits to prevent misalignment in medical and technical metrics.
 
 ### 2.4 Durable Local Persistence & App Lifecycle Resumption
 - All progress records are stored locally via `SharedPreferences` in an envelope schema under key `thaheen_progress_v1`.
 - **Hybrid Debouncing & Write-Through Buffer**:
-  - Continuous playback updates are debounced by **5 seconds** to prevent excessive disk/flash I/O.
-  - An immediate write-through buffer flush is triggered upon **pause**, **seek release**, **90% completion threshold crossing**, and across all Flutter `AppLifecycleListener` transitions (`paused`, `inactive`, `hidden`, `detached`).
+   - Continuous playback updates are debounced by **5 seconds** to prevent excessive disk/flash I/O.
+   - An immediate write-through buffer flush is triggered upon **pause**, **seek release**, **90% completion threshold crossing**, and across all Flutter `AppLifecycleListener` transitions (`paused`, `inactive`, `hidden`, `detached`).
 - **Resilient Cold Restarts**:
-  - Saved timestamps survive app termination and process evictions.
-  - The home screen renders a **"Continue Watching" (متابعة التعلم)** hero card displaying the last-watched unfinished lesson, resuming playback within $<100\text{ms}$.
-  - Storage corruption is detected, safely isolated, and reset to an empty state accompanied by an Arabic notification SnackBar: `"تمت إعادة ضبط سجل التعلم المحلي لسلامة البيانات"`.
+   - Saved timestamps survive app termination and process evictions.
+   - The home screen renders a **"Continue Watching" (متابعة التعلم)** hero card displaying the last-watched unfinished lesson, resuming playback immediately from local memory.
+   - Storage corruption is detected, safely isolated, and reset to an empty state accompanied by an Arabic notification SnackBar: `"تمت إعادة ضبط سجل التعلم المحلي لسلامة البيانات"`.
 
 ### 2.5 Zero Red Screens & Fault Tolerance
 - **In-Player Media Error Fallback**: If a video asset is missing, corrupted, or unsupported, `LessonPlayerPage` intercepts the error and displays a custom `InPlayerErrorCard` with Arabic explanation, a Retry action, and a Return to Course navigation button.
 - **Empty Course Fallback**: Courses with zero lessons or sections display an `EmptyCourseView` without layout collapse.
-- **Global Error Boundary**: A top-level error boundary overrides `ErrorWidget.builder` to catch any unhandled rendering exceptions, completely preventing the Flutter "red screen of death" in production.
+- **Global Error Boundary**: A top-level error boundary overrides `ErrorWidget.builder` to intercept unhandled widget build and layout exceptions with a user-facing Arabic fallback card, preventing red screens in production.
+
+### 2.6 Course Search & Arabic Normalization (Bonus Feature)
+- **Persistent Search Bar**: Integrated directly at the top of the course catalog with Arabic hint copy (`"ابحث عن دورة أو محاضر..."`) and dynamic clear action.
+- **Pure Dart Normalization Engine (`ArabicSearchHelper`)**:
+  - Automatically strips Arabic diacritics (*tashkeel*), tatweel/kashida, and normalizes alef variants (`أ`, `إ`, `آ`, `ٱ` $\rightarrow$ `ا`), taa marbuta (`ة` $\rightarrow$ `ه`), and alef maqsura (`ى` $\rightarrow$ `ي`).
+  - Matches across both course title and instructor name in real-time.
+- **Zero-Match Fault Tolerance (`EmptySearchView`)**:
+  - Displays a clean, respectful Arabic empty state when no courses match with a single-tap reset action (`"مسح البحث وتصفح الكل"`).
 
 ---
 
@@ -76,8 +84,11 @@ lib/
 ├── core/
 │   ├── errors/
 │   │   └── failures.dart          # Domain Failure hierarchy (NotFound, Storage, Parsing)
-│   └── storage/
-│       └── local_storage_service.dart # Durable SharedPreferences persistence service
+│   ├── storage/
+│   │   └── local_storage_service.dart # Durable SharedPreferences persistence service
+│   └── utils/
+│       ├── arabic_search_helper.dart  # Pure Dart Arabic normalization and fuzzy matching
+│       └── duration_formatter.dart    # Western Arabic timestamp formatting
 ├── features/
 │   ├── course/
 │   │   ├── application/
@@ -94,7 +105,7 @@ lib/
 │   │   └── presentation/
 │   │       ├── course_details_page.dart
 │   │       ├── course_list_page.dart
-│   │       └── widgets/ (CourseCard, SectionCard, LessonListTile, EmptyCourseView, etc.)
+│   │       └── widgets/ (CourseCard, SectionCard, CourseSearchBar, EmptySearchView, etc.)
 │   └── player/
 │       ├── application/
 │       │   └── lesson_player_cubit.dart
@@ -117,13 +128,13 @@ lib/
 
 ### 4.1 Prerequisites
 - **Flutter SDK**: `>=3.19.0`
-- **Dart SDK**: `>=3.3.0`
+- **Dart SDK**: `^3.13.0`
 - Compatible with iOS, Android, and macOS desktop.
 
 ### 4.2 Installation & Launch
 ```bash
 # 1. Clone repository
-git clone https://github.com/example/thaheen_lms.git
+git clone https://github.com/axah710/thaheen_lms.git
 cd thaheen_lms
 
 # 2. Fetch offline dependencies
@@ -146,7 +157,7 @@ dart format --output=none --set-exit-if-changed .
 # 2. Static Analysis (zero warnings, zero errors enforced)
 flutter analyze --no-pub
 
-# 3. Full Test Suite Execution (Unit, Widget, and Lifecycle tests)
+# 3. Full Test Suite Execution (102 Unit, Widget, and Lifecycle tests)
 flutter test --no-pub
 
 # 4. Whitespace and Git Hygiene check
@@ -162,6 +173,7 @@ git diff --check
 | **Progress Calculations** | `flutter test --no-pub test/unit/domain/progress_calculation_test.dart` | Tests progress percentage, clamping, and zero-length safety |
 | **Persistence & Lifecycle** | `flutter test --no-pub test/widget/persistence_lifecycle_test.dart` | Tests cold restarts, `AppLifecycleListener`, corruption recovery |
 | **Arabic RTL Ergonomics** | `flutter test --no-pub test/widget/arabic_rtl_ergonomics_test.dart` | Tests RTL margins, unmirrored controls, Western numerals |
+| **Arabic Search & Normalization** | `flutter test --no-pub test/unit/core/arabic_search_helper_test.dart` | Tests tashkeel, alef/taa marbuta normalization & substring matching |
 | **Zero Red Screens Resilience** | `flutter test --no-pub test/widget/zero_red_screens_resilience_test.dart` | Tests corrupt video error card and global error boundary |
 
 ---
@@ -172,7 +184,7 @@ git diff --check
 |---|---|---|
 | **Bundled Offline Assets** | Health-sciences students often study in zero-connectivity clinical wards. | Increases initial package size (<40 MB). Mitigated with short, optimized H.264 clips. |
 | **Hybrid Persistence (5s Debounce + Write-Through)** | Frequent disk I/O on every frame/second causes flash wear and battery drain. | Risk of lost progress on sudden OS kill. Mitigated by immediate flush on `paused`, `inactive`, `hidden`, and `detached`. |
-| **Pure Dart Domain Invariants** | Isolating business logic from Flutter makes tests deterministic, fast (<2s), and codec-independent. | Requires mapping between domain models and DTOs. |
+| **Pure Dart Domain Invariants** | Isolating business logic from Flutter makes tests deterministic, fast (<10s), and codec-independent. | Requires mapping between domain models and DTOs. |
 | **Unmirrored Media Controls in RTL** | Arabic readers perceive video progress and playback controls through universal physical time conventions. | Requires explicit `matchTextDirection: false` configuration on playback icons. |
 | **Fail-Closed Global Error Boundary** | Prevents confusing crashes and red screens for medical students during study sessions. | Overrides Flutter's default error screen with an informative Arabic recovery dialog. |
 
@@ -180,4 +192,4 @@ git diff --check
 
 ## 7. License & Credits
 
-Developed with precision for medical learning excellence. All medical terminology and pedagogical structures comply with modern health-sciences educational standards.
+Developed for offline health-sciences learning. All medical terminology and pedagogical structures follow standardized educational curricula.
